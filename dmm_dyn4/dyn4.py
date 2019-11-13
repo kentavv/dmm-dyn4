@@ -217,6 +217,38 @@ class DMMDrive:
         self.general_read(self.dyn_fids['Is_TrqCurrent'])
         return self.check_response(self.dyn_fids['Is_TrqCurrent'])
 
+    def set_Config(self):
+        func_id2 = self.host_fids['Set_Drive_Config']
+        # Toggling the enable bit (b5) does not effect the drive (only tested in analog mode)
+        cnf = ((0 << 6) |    # TBD
+               (1 << 5) |    # b5 = 0 : let Drive servo
+                             # b5 = 1 : let Drive free, motor could be turned freely
+               (0x01 << 3) | # b4 b3 = 0 : Position servo as default
+                             #         1 : Speed servo
+                             #         2 : Torque servo
+                             #         3 : TBD
+               (0 << 2) |    # b2 = 0 : works as relative mode(default) like normal optical encoder
+                             # b2 = 1 : works as absolute position system, motor will back to absolute zero or POS2(Stored in
+                             #          sensor) automatically after power on reset.
+               (0x03 << 0))  # b1 b0 = 0 : RS232 mode
+                             #         1 : CW,CCW mode
+                             #         2 : Pulse/Dir or (SPI mode Optional)
+                             #         3 : Anlog mode
+        packet = [0x00 | self.drive_id,
+                  0x80 | (0 << 5) | func_id2,
+                  0x80 | cnf]
+        
+        packet += [0x80 | (sum(packet) & 0x7f)]
+
+        if self.debug:
+            print([hex(x) for x in packet])
+
+        packet = bytearray(packet)
+        n = self.serial.write(packet)
+
+        if n != len(packet):
+            raise DMMExceptionTruncatedWrite(n, len(packet))
+
     def check_response(self, expected_func_id, max_attempts=3):
         for i in range(max_attempts):
             func_id, v = self.read_response()
@@ -455,7 +487,7 @@ class DMMDrive:
                         d['enabled'] = 'let Drive free, motor could be turned freely'
                         d['enabled'] = 'no'
 
-                    if x & (1 << 5):
+                    if x & (1 << 6):
                         d['b6'] = '1 TBD'
                     else:
                         d['b6'] = '0 TBD'
