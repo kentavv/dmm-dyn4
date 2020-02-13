@@ -524,10 +524,12 @@ class DMMDrive:
 
     def measure_speed(self, integration_time=.1):
         p1 = self.read_AbsPos32()
+        t1 = time.time()
         time.sleep(integration_time)
         p2 = self.read_AbsPos32()
+        t2 = time.time()
         encoder_ppr = 65536.
-        rpm = (p2 - p1) / integration_time * 60. / encoder_ppr
+        rpm = (p2 - p1) / (t2 - t1) * 60. / encoder_ppr
         return rpm
 
     def set_speed(self, rpm):
@@ -587,12 +589,17 @@ def main():
         d['TrqCurrent'] = dmm.read_TrqCurrent()
 
         dmm.set_speed(50)
+
         time.sleep(.5)
         d['Speed'] = dmm.measure_speed()
 
         print(d)
 
-        dmm.integrate_TrqCurrent()
+        while True:
+            time.sleep(.5)
+            print(dmm.measure_speed())
+
+            dmm.integrate_TrqCurrent()
 
 
 if __name__ == "__main__":
