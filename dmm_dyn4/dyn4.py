@@ -73,7 +73,7 @@ class DMMExceptionUnexpectedFunc(DMMException):
 
 class DMMDrive:
     def __init__(self, serial_dev, drive_id):
-        self.serial = serial.Serial('/dev/ttyUSB4',
+        self.serial = serial.Serial(serial_dev,
                                     38400,
                                     timeout=None,
                                     parity=serial.PARITY_NONE,
@@ -569,8 +569,9 @@ class DMMDrive:
 
 
 def main():
-    with DMMDrive('/dev/ttyUSB4', 0) as dmm:
+    with DMMDrive('/dev/ttyUSB0', 0) as dmm:
         d = {}
+        d['Status'] = dmm.read_Status()
 
         d['MainGain'] = dmm.read_MainGain()
         d['SpeedGain'] = dmm.read_SpeedGain()
