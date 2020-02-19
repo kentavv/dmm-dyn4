@@ -23,6 +23,7 @@
 
 from __future__ import print_function
 
+import sys
 import time
 import serial
 
@@ -36,6 +37,11 @@ def sign_extend(value, bits):
 
 
 class DMMException(Exception):
+    def __init__(self):
+        Exception.__init__(self)
+
+
+class DMMTimeout(DMMException):
     def __init__(self):
         Exception.__init__(self)
 
@@ -84,6 +90,7 @@ class DMMDrive:
         # print(dir(self.serial))
 
         self.flush()
+
         # print(serial.VERSION)
         # print(self.serial.isOpen())
         self.debug = False
@@ -95,9 +102,13 @@ class DMMDrive:
         self.serial.close()
 
     def flush(self):
-        self.serial.flushInput()
+        if serial.VERSION > '2.5':
+            self.serial.reset_input_buffer()
+        else:
+            self.serial.flushInput()
+
         self.serial.timeout = .05
-        while self.serial.read(1) != '':
+        while len(self.serial.read(1)) > 0:
             pass
 
     @staticmethod
@@ -288,7 +299,7 @@ class DMMDrive:
         timed_out = False
         while True:
             x = self.serial.read(1)
-            if x == '':
+            if len(x) == 0:
                 # timeout occured
                 timed_out = True
                 break
@@ -313,7 +324,7 @@ class DMMDrive:
                 break
 
         if timed_out:
-            return False
+            raise DMMTimeout()
 
         if self.debug:
             print(expected_len, len(arr), [hex(x) for x in arr])
@@ -570,8 +581,37 @@ class DMMDrive:
         print(d)
 
 
-def main():
-    with DMMDrive('/dev/ttyUSB0', 0) as dmm:
+def find_device():
+    devs = []
+
+    global serial
+    if serial.VERSION > '2.5':
+        import serial.tools.list_ports
+
+        for dev in serial.tools.list_ports.comports():
+            if dev.description == 'FT230X Basic UART' and dev.manufacturer == 'FTDI' and dev.product == 'FT230X Basic UART':
+                devs += [dev.device]
+    else:
+        # LinuxCNC 2.7.15 is still tied to Python2
+        import glob
+        devs = glob.glob('/dev/ttyUSB*')
+
+    if not devs:
+        print('No known serial devices found.')
+        return ''
+
+    if len(devs) > 1:
+        print('More than one serial devices found...')
+        for dev in devs:
+            print(dev)
+        print('Selecting first serial device.')
+
+    print('Using device at:', devs[0])
+    return devs[0]
+
+
+def serial_loop(dev_fn):
+    with DMMDrive(dev_fn, 0) as dmm:
         d = {}
         d['Status'] = dmm.read_Status()
 
@@ -600,6 +640,26 @@ def main():
             print(dmm.measure_speed())
 
             dmm.integrate_TrqCurrent()
+
+       
+def main():
+    try:
+        while True:
+            dev_fn = find_device()
+            if dev_fn:
+                try:
+                    serial_loop(dev_fn)
+                except DMMTimeout:
+                    print('Timedout')
+                    # raise
+                except serial.serialutil.SerialException as e:
+                    # SerialException: could not open port /dev/ttyUSB1: [Errno 2] No such file or directory: '/dev/ttyUSB1'
+                    # SerialException: device reports readiness to read but returned no data (device disconnected?)
+                    print('SerialException:', e)
+            print('Kicked out... resting before retrying.')
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
