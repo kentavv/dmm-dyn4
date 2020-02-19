@@ -95,6 +95,9 @@ class DMMDrive:
         # print(self.serial.isOpen())
         self.debug = False
 
+        self.torque_arr = []
+
+
     def __enter__(self):
         return self
 
@@ -580,6 +583,33 @@ class DMMDrive:
              'stddev': np.std(arr)}
         print(d)
 
+    def update_TrqCurrent(self, max_dt=1.):
+        st = time.time()
+        dt = 0.
+        st10 = time.time()
+        self.torque_arr += [(st, self.read_TrqCurrent())]
+        st11 = time.time()
+        print('round trip:', st11 - st10)
+        dt = time.time() - st
+
+        self.torque_arr = [v for v in self.torque_arr if (st - v[0]) <= max_dt]
+        print('len(arr):', len(self.torque_arr))
+
+        # = [dmm.read_TrqCurrent() for _ in range(100)]
+        # print(self.torque_arr)
+        arr = [v[1] for v in self.torque_arr]
+        d = {'min': np.min(arr), 'max': np.max(arr), 'mean': np.mean(arr), 'median': np.median(arr),
+             'stddev': np.std(arr)}
+        print(d)
+
+        arr = np.abs(arr)
+        d = {'min': np.min(arr), 'max': np.max(arr), 'mean': np.mean(arr), 'median': np.median(arr),
+             'stddev': np.std(arr)}
+        print(d)
+
+        arr = [v[1] for v in self.torque_arr]
+        return np.mean(arr), arr[-1]
+
 
 def find_device():
     devs = []
@@ -628,18 +658,19 @@ def serial_loop(dev_fn):
         d['AbsPos32'] = dmm.read_AbsPos32()
         d['TrqCurrent'] = dmm.read_TrqCurrent()
 
-        dmm.set_speed(50)
+        if True:
+            dmm.set_speed(50)
 
-        time.sleep(.5)
-        d['Speed'] = dmm.measure_speed()
-
-        print(d)
-
-        while True:
             time.sleep(.5)
-            print(dmm.measure_speed())
+            d['Speed'] = dmm.measure_speed()
 
-            dmm.integrate_TrqCurrent()
+            print(d)
+
+            while True:
+                time.sleep(.5)
+                print(dmm.measure_speed())
+
+                dmm.integrate_TrqCurrent()
 
        
 def main():
